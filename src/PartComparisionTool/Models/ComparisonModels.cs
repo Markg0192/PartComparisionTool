@@ -25,6 +25,24 @@ namespace PartComparisionTool.Models
         public int FittingCount { get; set; }
         public string Differences { get; set; }
 
+        public string MatchText
+        {
+            get
+            {
+                switch (Quality)
+                {
+                    case MatchQuality.Exact:
+                        return "Exact";
+                    case MatchQuality.VeryClose:
+                        return "Very close";
+                    case MatchQuality.Close:
+                        return "Close";
+                    default:
+                        return "Possible";
+                }
+            }
+        }
+
         internal Part MainPart { get; set; }
     }
 
