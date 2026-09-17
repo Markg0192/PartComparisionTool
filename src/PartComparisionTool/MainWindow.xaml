@@ -109,8 +109,8 @@
                 Background="#F5F5F5"
                 CornerRadius="4">
             <TextBlock TextWrapping="Wrap">
-                <Run FontWeight="SemiBold" Text="Ranking: " />
-                <Run Text="Exact = no differences found by the configured checks. Very Close / Close / Possible results remain useful because the Differences column tells you what would need checked or modified." />
+                <Run FontWeight="SemiBold" Text="Results: " />
+                <Run Text="Exact means no differences were found. Other rows say exactly what is missing, extra or different so you can judge whether the piece can be adapted quickly." />
             </TextBlock>
         </Border>
 
@@ -121,9 +121,10 @@
                   CanUserAddRows="False"
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
+                  SelectionChanged="ResultsGrid_SelectionChanged"
                   MouseDoubleClick="ResultsGrid_MouseDoubleClick">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Match" Binding="{Binding Quality}" Width="95" />
+                <DataGridTextColumn Header="Match" Binding="{Binding MatchText}" Width="95" />
                 <DataGridTextColumn Header="Score" Binding="{Binding Score, StringFormat={}{0}%}" Width="70" />
                 <DataGridTextColumn Header="Phase" Binding="{Binding Phase}" Width="60" />
                 <DataGridTextColumn Header="Assembly" Binding="{Binding AssemblyMark}" Width="100" />
@@ -133,7 +134,7 @@
                 <DataGridTextColumn Header="Weight" Binding="{Binding Weight, StringFormat={}{0:0.0} kg}" Width="90" />
                 <DataGridTextColumn Header="Δ Weight" Binding="{Binding WeightDifference, StringFormat={}{0:+0.0;-0.0;0.0} kg}" Width="90" />
                 <DataGridTextColumn Header="Fittings" Binding="{Binding FittingCount}" Width="70" />
-                <DataGridTextColumn Header="Differences / adaptation needed" Binding="{Binding Differences}" Width="*" MinWidth="280" />
+                <DataGridTextColumn Header="What is different?" Binding="{Binding Differences}" Width="*" MinWidth="360" />
             </DataGrid.Columns>
         </DataGrid>
 
@@ -145,10 +146,10 @@
 
             <TextBlock VerticalAlignment="Center"
                        Foreground="DimGray"
-                       Text="Double-click a result, or select it and use the button, to highlight its main part in Tekla." />
+                       Text="Click a row to select that candidate in Tekla and zoom the model to it." />
 
             <Button Grid.Column="1"
-                    Content="Select result in Tekla"
+                    Content="Select + zoom in Tekla"
                     Padding="16,8"
                     Click="SelectResultButton_Click" />
         </Grid>
