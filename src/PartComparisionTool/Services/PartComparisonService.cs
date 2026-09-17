@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using PartComparisionTool.Models;
-using Tekla.Structures.Filtering;
-using Tekla.Structures.Filtering.Categories;
 using Tekla.Structures.Model;
 
 namespace PartComparisionTool.Services
@@ -18,6 +16,9 @@ namespace PartComparisionTool.Services
         private readonly AssemblySnapshotBuilder _snapshotBuilder;
         private readonly AssemblyComparer _comparer;
 
+        private Assembly _targetAssembly;
+        private AssemblySnapshot _target;
+
         public PartComparisonService()
         {
             _model = new Model();
@@ -27,95 +28,94 @@ namespace PartComparisionTool.Services
 
         public bool IsConnected => _model.GetConnectionStatus();
 
-        public List<ComparisonResult> FindMatches(
-            HashSet<int> phases,
-            Action<SearchProgress> progress,
-            out string targetDescription)
+        public string CaptureTargetSelection()
         {
             if (!IsConnected)
                 throw new InvalidOperationException("Open Tekla Structures 2023 with the required model loaded first.");
 
-            if (phases == null || phases.Count == 0)
-                throw new InvalidOperationException("Enter at least one phase to search.");
-
-            var selectedPart = GetSelectedPart();
-            var targetAssembly = selectedPart.GetAssembly();
-            if (targetAssembly == null)
+            var selectedPart = GetSingleSelectedPart();
+            var assembly = selectedPart.GetAssembly();
+            if (assembly == null)
                 throw new InvalidOperationException("The selected part does not belong to an assembly.");
 
-            progress?.Invoke(new SearchProgress { Message = "Reading selected assembly..." });
-            var target = _snapshotBuilder.Build(targetAssembly);
-            targetDescription = BuildTargetDescription(target);
+            _targetAssembly = assembly;
+            _target = _snapshotBuilder.Build(assembly);
 
-            progress?.Invoke(new SearchProgress
-            {
-                Message = $"Filtering phases {string.Join(", ", phases.OrderBy(x => x))} for {target.MainProfile}..."
-            });
+            return BuildTargetDescription(_target);
+        }
 
-            // Push the cheap phase + profile filtering into Tekla itself. This avoids
-            // enumerating every Part in a large model just to reject it in C#.
-            var filteredSets = phases
-                .OrderBy(x => x)
-                .Select(phase => GetPotentialParts(phase, target.MainProfile))
-                .ToList();
+        public List<ComparisonResult> FindMatchesInCurrentSelection(
+            Action<SearchProgress> progress,
+            out string searchDescription)
+        {
+            if (!IsConnected)
+                throw new InvalidOperationException("Open Tekla Structures 2023 with the required model loaded first.");
 
-            var total = filteredSets.Sum(x => x.GetSize());
-            var current = 0;
+            if (_target == null || _targetAssembly == null)
+                throw new InvalidOperationException("Set the target piece first.");
+
+            progress?.Invoke(new SearchProgress { Message = "Reading selected search steel..." });
+
+            var selectedAssemblies = GetUniqueSelectedAssemblies();
+            if (selectedAssemblies.Count == 0)
+                throw new InvalidOperationException("Select the steel you want to search through in Tekla first.");
+
+            searchDescription = $"Searching {selectedAssemblies.Count:n0} selected assembly/assemblies";
+
             var results = new List<ComparisonResult>();
-            var seenAssemblies = new HashSet<int>();
+            var current = 0;
+            var total = selectedAssemblies.Count;
 
-            foreach (var objects in filteredSets)
+            foreach (var assembly in selectedAssemblies)
             {
-                while (objects.MoveNext())
+                current++;
+
+                if (current == 1 || current % 25 == 0 || current == total)
                 {
-                    current++;
-                    var part = objects.Current as Part;
-                    if (part == null)
-                        continue;
-
-                    if (current == 1 || current % 50 == 0 || current == total)
-                    {
-                        progress?.Invoke(new SearchProgress
-                        {
-                            Current = current,
-                            Total = total,
-                            Message = $"Checking filtered parts {current:n0} of {total:n0}..."
-                        });
-                    }
-
-                    var length = AssemblySnapshotBuilder.GetLength(part);
-                    if (Math.Abs(length - target.MainLength) > LengthTolerance)
-                        continue;
-
-                    var assembly = part.GetAssembly();
-                    if (assembly == null || assembly.Identifier.ID == targetAssembly.Identifier.ID)
-                        continue;
-
-                    // We only want assemblies whose MAIN part matches the requested
-                    // profile/length. A fitting with the same profile must not qualify.
-                    var mainPart = assembly.GetMainPart() as Part;
-                    if (mainPart == null || mainPart.Identifier.ID != part.Identifier.ID)
-                        continue;
-
-                    if (!seenAssemblies.Add(assembly.Identifier.ID))
-                        continue;
-
                     progress?.Invoke(new SearchProgress
                     {
                         Current = current,
                         Total = total,
-                        Message = $"Comparing candidate {SafeAssemblyMark(mainPart)}..."
+                        Message = $"Checking selected assemblies {current:n0} of {total:n0}..."
                     });
+                }
 
-                    try
-                    {
-                        var candidate = _snapshotBuilder.Build(assembly);
-                        results.Add(_comparer.Compare(target, candidate));
-                    }
-                    catch
-                    {
-                        // A malformed or unsupported object should not stop the whole site search.
-                    }
+                if (assembly.Identifier.ID == _targetAssembly.Identifier.ID)
+                    continue;
+
+                var mainPart = assembly.GetMainPart() as Part;
+                if (mainPart == null)
+                    continue;
+
+                // Keep the cheap checks first. We do not build solids, bolts or welds
+                // until the candidate has the same main profile and length.
+                if (!string.Equals(
+                        AssemblySnapshotBuilder.GetProfile(mainPart),
+                        _target.MainProfile,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var length = AssemblySnapshotBuilder.GetLength(mainPart);
+                if (Math.Abs(length - _target.MainLength) > LengthTolerance)
+                    continue;
+
+                progress?.Invoke(new SearchProgress
+                {
+                    Current = current,
+                    Total = total,
+                    Message = $"Comparing candidate {SafeAssemblyMark(mainPart)}..."
+                });
+
+                try
+                {
+                    var candidate = _snapshotBuilder.Build(assembly);
+                    results.Add(_comparer.Compare(_target, candidate));
+                }
+                catch
+                {
+                    // A malformed or unsupported object should not stop the whole search.
                 }
             }
 
@@ -132,7 +132,7 @@ namespace PartComparisionTool.Services
                 Current = total,
                 Total = total,
                 Message = ordered.Count == 0
-                    ? "No assemblies with the same main profile and length were found in the selected phases."
+                    ? "No assemblies with the same main profile and length were found in the selected steel."
                     : $"Found {ordered.Count:n0} candidate assembly/assemblies."
             });
 
@@ -149,40 +149,56 @@ namespace PartComparisionTool.Services
             selector.Select(selected);
         }
 
-        private ModelObjectEnumerator GetPotentialParts(int phase, string profile)
-        {
-            var phaseExpression = new BinaryFilterExpression(
-                new PartFilterExpressions.Phase(),
-                NumericOperatorType.IS_EQUAL,
-                new NumericConstantFilterExpression(phase));
-
-            var profileExpression = new BinaryFilterExpression(
-                new PartFilterExpressions.Profile(),
-                StringOperatorType.IS_EQUAL,
-                new StringConstantFilterExpression(profile));
-
-            var filter = new BinaryFilterExpressionCollection();
-            filter.Add(new BinaryFilterExpressionItem(
-                phaseExpression,
-                BinaryFilterOperatorType.BOOLEAN_AND));
-            filter.Add(new BinaryFilterExpressionItem(profileExpression));
-
-            return _model.GetModelObjectSelector().GetObjectsByFilter(filter);
-        }
-
-        private static Part GetSelectedPart()
+        private static Part GetSingleSelectedPart()
         {
             var selector = new Tekla.Structures.Model.UI.ModelObjectSelector();
             var selectedObjects = selector.GetSelectedObjects();
+            Part selectedPart = null;
+            var partCount = 0;
 
             while (selectedObjects.MoveNext())
             {
                 var part = selectedObjects.Current as Part;
-                if (part != null)
-                    return part;
+                if (part == null)
+                    continue;
+
+                selectedPart = part;
+                partCount++;
+
+                if (partCount > 1)
+                    break;
             }
 
-            throw new InvalidOperationException("Select a part in the Tekla model first.");
+            if (selectedPart == null)
+                throw new InvalidOperationException("Select one part from the assembly you want to find.");
+
+            if (partCount > 1)
+                throw new InvalidOperationException("Select only one part when setting the target.");
+
+            return selectedPart;
+        }
+
+        private static List<Assembly> GetUniqueSelectedAssemblies()
+        {
+            var selector = new Tekla.Structures.Model.UI.ModelObjectSelector();
+            var selectedObjects = selector.GetSelectedObjects();
+            var assemblies = new Dictionary<int, Assembly>();
+
+            while (selectedObjects.MoveNext())
+            {
+                var part = selectedObjects.Current as Part;
+                if (part == null)
+                    continue;
+
+                var assembly = part.GetAssembly();
+                if (assembly == null)
+                    continue;
+
+                if (!assemblies.ContainsKey(assembly.Identifier.ID))
+                    assemblies.Add(assembly.Identifier.ID, assembly);
+            }
+
+            return assemblies.Values.ToList();
         }
 
         private static string BuildTargetDescription(AssemblySnapshot target)
