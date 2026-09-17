@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using PartComparisionTool.Models;
+using Tekla.Structures.Geometry3d;
 using Tekla.Structures.Model;
+using Tekla.Structures.Model.UI;
 
 namespace PartComparisionTool.Services
 {
@@ -139,7 +141,7 @@ namespace PartComparisionTool.Services
             return ordered;
         }
 
-        public void SelectResult(ComparisonResult result)
+        public void SelectAndZoomToResult(ComparisonResult result)
         {
             if (result?.MainPart == null)
                 return;
@@ -147,6 +149,77 @@ namespace PartComparisionTool.Services
             var selected = new ArrayList { result.MainPart };
             var selector = new Tekla.Structures.Model.UI.ModelObjectSelector();
             selector.Select(selected);
+
+            var assembly = result.MainPart.GetAssembly();
+            var box = GetAssemblyBoundingBox(assembly);
+            if (box != null)
+                ViewHandler.ZoomToBoundingBox(box);
+        }
+
+        private static AABB GetAssemblyBoundingBox(Assembly assembly)
+        {
+            if (assembly == null)
+                return null;
+
+            var parts = new List<Part>();
+            var mainPart = assembly.GetMainPart() as Part;
+            if (mainPart != null)
+                parts.Add(mainPart);
+
+            var secondaries = assembly.GetSecondaries();
+            if (secondaries != null)
+            {
+                foreach (var item in secondaries)
+                {
+                    var part = item as Part;
+                    if (part != null)
+                        parts.Add(part);
+                }
+            }
+
+            var hasBounds = false;
+            var minX = double.MaxValue;
+            var minY = double.MaxValue;
+            var minZ = double.MaxValue;
+            var maxX = double.MinValue;
+            var maxY = double.MinValue;
+            var maxZ = double.MinValue;
+
+            foreach (var part in parts)
+            {
+                try
+                {
+                    var solid = part.GetSolid();
+                    if (solid == null)
+                        continue;
+
+                    hasBounds = true;
+                    minX = Math.Min(minX, solid.MinimumPoint.X);
+                    minY = Math.Min(minY, solid.MinimumPoint.Y);
+                    minZ = Math.Min(minZ, solid.MinimumPoint.Z);
+                    maxX = Math.Max(maxX, solid.MaximumPoint.X);
+                    maxY = Math.Max(maxY, solid.MaximumPoint.Y);
+                    maxZ = Math.Max(maxZ, solid.MaximumPoint.Z);
+                }
+                catch
+                {
+                    // Ignore a bad secondary and frame the remaining assembly parts.
+                }
+            }
+
+            if (!hasBounds)
+                return null;
+
+            var largestDimension = Math.Max(maxX - minX, Math.Max(maxY - minY, maxZ - minZ));
+            var margin = Math.Max(500.0, largestDimension * 0.12);
+
+            var box = new AABB
+            {
+                MinPoint = new Point(minX - margin, minY - margin, minZ - margin),
+                MaxPoint = new Point(maxX + margin, maxY + margin, maxZ + margin)
+            };
+
+            return box;
         }
 
         private static Part GetSingleSelectedPart()
