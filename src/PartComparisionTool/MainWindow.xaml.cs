@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -45,24 +44,32 @@ namespace PartComparisionTool
             InitialiseService();
         }
 
-        private void FindButton_Click(object sender, RoutedEventArgs e)
+        private void SetTargetButton_Click(object sender, RoutedEventArgs e)
         {
             RunSafely(() =>
             {
-                var phases = PhaseParser.Parse(PhaseTextBox.Text);
-                StatusText.Text = $"Searching phases {PhaseParser.Format(phases)}...";
-                TargetText.Text = "Reading selected assembly...";
+                TargetText.Text = _service.CaptureTargetSelection();
+                SearchSelectionText.Text = "No search selection processed yet.";
+                ResultsGrid.ItemsSource = null;
+                StatusText.Text = "Target stored. Now select the steel you want to search through.";
+            }, false);
+        }
+
+        private void SearchSelectionButton_Click(object sender, RoutedEventArgs e)
+        {
+            RunSafely(() =>
+            {
                 ResultsGrid.ItemsSource = null;
 
-                string targetDescription;
-                var results = _service.FindMatches(phases, UpdateProgress, out targetDescription);
+                string searchDescription;
+                var results = _service.FindMatchesInCurrentSelection(UpdateProgress, out searchDescription);
 
-                TargetText.Text = targetDescription;
+                SearchSelectionText.Text = searchDescription;
                 ResultsGrid.ItemsSource = results;
 
                 if (results.Count == 0)
                 {
-                    StatusText.Text = "No same-profile / same-length candidates were found in the selected phases.";
+                    StatusText.Text = "No same-profile / same-length candidates were found in the selected steel.";
                 }
                 else
                 {
@@ -122,7 +129,8 @@ namespace PartComparisionTool
         {
             try
             {
-                FindButton.IsEnabled = false;
+                SetTargetButton.IsEnabled = false;
+                SearchSelectionButton.IsEnabled = false;
                 Mouse.OverrideCursor = Cursors.Wait;
 
                 if (resetProgress)
@@ -140,7 +148,8 @@ namespace PartComparisionTool
             finally
             {
                 SearchProgressBar.IsIndeterminate = false;
-                FindButton.IsEnabled = true;
+                SetTargetButton.IsEnabled = true;
+                SearchSelectionButton.IsEnabled = true;
                 Mouse.OverrideCursor = null;
                 UpdateConnectionStatus();
             }
