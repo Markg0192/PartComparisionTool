@@ -186,19 +186,30 @@ namespace PartComparisionTool.Services
 
             while (selectedObjects.MoveNext())
             {
+                var selectedAssembly = selectedObjects.Current as Assembly;
+                if (selectedAssembly != null)
+                {
+                    AddAssembly(assemblies, selectedAssembly);
+                    continue;
+                }
+
                 var part = selectedObjects.Current as Part;
                 if (part == null)
                     continue;
 
-                var assembly = part.GetAssembly();
-                if (assembly == null)
-                    continue;
-
-                if (!assemblies.ContainsKey(assembly.Identifier.ID))
-                    assemblies.Add(assembly.Identifier.ID, assembly);
+                AddAssembly(assemblies, part.GetAssembly());
             }
 
             return assemblies.Values.ToList();
+        }
+
+        private static void AddAssembly(IDictionary<int, Assembly> assemblies, Assembly assembly)
+        {
+            if (assembly == null)
+                return;
+
+            if (!assemblies.ContainsKey(assembly.Identifier.ID))
+                assemblies.Add(assembly.Identifier.ID, assembly);
         }
 
         private static string BuildTargetDescription(AssemblySnapshot target)
