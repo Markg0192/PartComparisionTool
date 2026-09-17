@@ -27,7 +27,7 @@
                 <TextBlock Text="Part Comparison Tool"
                            FontSize="26"
                            FontWeight="SemiBold" />
-                <TextBlock Text="Find an identical or quickly adaptable assembly in later phases."
+                <TextBlock Text="Find an identical or quickly adaptable assembly from steel you select in the model."
                            Margin="0,4,0,0"
                            Foreground="DimGray" />
             </StackPanel>
@@ -51,34 +51,35 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Text="Phases to search"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
-
-                <TextBox x:Name="PhaseTextBox"
-                         Grid.Column="1"
-                         Margin="12,0,14,0"
-                         Padding="8,6"
-                         Text="3,4,5"
-                         ToolTip="Examples: 3,4,5 or 3-5" />
-
-                <Button x:Name="FindButton"
-                        Grid.Column="2"
-                        Content="Find matches"
-                        Padding="20,7"
+                <Button x:Name="SetTargetButton"
+                        Content="1. Set target from selection"
+                        Padding="18,8"
                         FontWeight="SemiBold"
-                        Click="FindButton_Click" />
+                        Click="SetTargetButton_Click" />
 
-                <TextBlock Grid.Column="3"
-                           Margin="16,0,0,0"
+                <TextBlock Grid.Column="1"
+                           Margin="14,0,22,0"
                            VerticalAlignment="Center"
                            Foreground="DimGray"
-                           Text="Select any part from the missing assembly in the Tekla model, then run the search." />
+                           Text="Select one part from the missing assembly, then click this button." />
+
+                <Button x:Name="SearchSelectionButton"
+                        Grid.Column="2"
+                        Content="2. Search selected steel"
+                        Padding="18,8"
+                        FontWeight="SemiBold"
+                        Click="SearchSelectionButton_Click" />
+
+                <TextBlock Grid.Column="3"
+                           Margin="14,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="DimGray"
+                           Text="Select all steel you want to search through, then click this button." />
             </Grid>
         </Border>
 
@@ -86,6 +87,10 @@
             <TextBlock x:Name="TargetText"
                        FontWeight="SemiBold"
                        Text="No target selected yet." />
+            <TextBlock x:Name="SearchSelectionText"
+                       Margin="0,4,0,0"
+                       Foreground="DimGray"
+                       Text="No search selection processed yet." />
             <ProgressBar x:Name="SearchProgressBar"
                          Height="8"
                          Margin="0,9,0,0"
