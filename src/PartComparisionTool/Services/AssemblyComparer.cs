@@ -190,7 +190,12 @@ namespace PartComparisionTool.Services
 
         private static string DetailedPartKey(PartSnapshot part)
         {
-            return string.Join("|", SimplePartKey(part), part.GeometryKey ?? string.Empty);
+            return string.Join("|",
+                part.Profile ?? string.Empty,
+                part.Material ?? string.Empty,
+                part.Finish ?? string.Empty,
+                part.Length.ToString("0.0", CultureInfo.InvariantCulture),
+                part.GeometryKey ?? string.Empty);
         }
 
         private static string SimplePartKey(PartSnapshot part)
