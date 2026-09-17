@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using PartComparisionTool.Models;
@@ -75,10 +76,27 @@ namespace PartComparisionTool
                 {
                     var exactCount = results.Count(x => x.Quality == MatchQuality.Exact);
                     StatusText.Text = exactCount > 0
-                        ? $"Found {results.Count:n0} candidate(s), including {exactCount:n0} exact match(es)."
-                        : $"Found {results.Count:n0} candidate(s). No exact match was found; closest options are shown first.";
+                        ? $"Found {results.Count:n0} candidate(s), including {exactCount:n0} exact match(es). Click a row to inspect it in Tekla."
+                        : $"Found {results.Count:n0} candidate(s). No exact match was found; closest options are shown first. Click a row to inspect it in Tekla.";
                 }
             });
+        }
+
+        private void ResultsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var result = ResultsGrid.SelectedItem as ComparisonResult;
+            if (result == null || _service == null)
+                return;
+
+            try
+            {
+                _service.SelectAndZoomToResult(result);
+                StatusText.Text = $"Showing {DisplayResultName(result)} in Tekla.";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = ex.Message;
+            }
         }
 
         private void SelectResultButton_Click(object sender, RoutedEventArgs e)
@@ -93,15 +111,30 @@ namespace PartComparisionTool
 
         private void SelectCurrentResult()
         {
-            RunSafely(() =>
+            try
             {
                 var result = ResultsGrid.SelectedItem as ComparisonResult;
                 if (result == null)
                     throw new InvalidOperationException("Select a result first.");
 
-                _service.SelectResult(result);
-                StatusText.Text = $"Selected {result.AssemblyMark} in Tekla.";
-            }, false);
+                _service.SelectAndZoomToResult(result);
+                StatusText.Text = $"Showing {DisplayResultName(result)} in Tekla.";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = ex.Message;
+            }
+        }
+
+        private static string DisplayResultName(ComparisonResult result)
+        {
+            if (!string.IsNullOrWhiteSpace(result.AssemblyMark))
+                return result.AssemblyMark;
+
+            if (!string.IsNullOrWhiteSpace(result.MainPartMark))
+                return result.MainPartMark;
+
+            return "candidate";
         }
 
         private void UpdateProgress(SearchProgress progress)
