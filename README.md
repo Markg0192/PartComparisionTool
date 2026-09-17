@@ -1,6 +1,6 @@
 # Part Comparison Tool
 
-Tekla Structures 2026 utility for finding replacement steel assemblies in later phases.
+Tekla Structures 2023 utility for finding replacement steel assemblies in later phases.
 
 ## Workflow
 
@@ -15,7 +15,8 @@ The search deliberately does not discard a candidate just because its weight dif
 
 ## Target
 
-- Tekla Structures 2026
+- Tekla Structures 2023
+- Tekla.Structures.Model 2023.0.1
 - .NET Framework 4.8
 - C# 7.3
 - WPF / x64
