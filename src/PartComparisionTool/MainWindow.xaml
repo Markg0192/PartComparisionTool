@@ -134,7 +134,16 @@
                 <DataGridTextColumn Header="Weight" Binding="{Binding Weight, StringFormat={}{0:0.0} kg}" Width="90" />
                 <DataGridTextColumn Header="Δ Weight" Binding="{Binding WeightDifference, StringFormat={}{0:+0.0;-0.0;0.0} kg}" Width="90" />
                 <DataGridTextColumn Header="Fittings" Binding="{Binding FittingCount}" Width="70" />
-                <DataGridTextColumn Header="What is different?" Binding="{Binding Differences}" Width="*" MinWidth="360" />
+                <DataGridTemplateColumn Header="What is different?" Width="*" MinWidth="360">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Differences}"
+                                       TextWrapping="Wrap"
+                                       Margin="4,3"
+                                       VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 
