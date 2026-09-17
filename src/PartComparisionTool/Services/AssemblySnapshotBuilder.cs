@@ -1,8 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using PartComparisionTool.Models;
@@ -24,8 +22,8 @@ namespace PartComparisionTool.Services
             if (mainPart == null)
                 throw new InvalidOperationException("The selected assembly does not have a steel main part.");
 
-            var mainCoordinateSystem = mainPart.GetCoordinateSystem();
-            var toMain = MatrixFactory.ToCoordinateSystem(mainCoordinateSystem);
+            var toMain = MatrixFactory.ToCoordinateSystem(mainPart.GetCoordinateSystem());
+            var secondaryParts = GetSecondaryParts(assembly);
 
             Phase phase;
             var phaseNumber = mainPart.GetPhase(out phase) ? phase.PhaseNumber : 0;
@@ -45,10 +43,12 @@ namespace PartComparisionTool.Services
                 Weight = mainSnapshot.Weight
             };
 
-            var partKeys = new Dictionary<int, string>();
-            partKeys[mainPart.Identifier.ID] = GetPartComparisonKey(mainSnapshot);
+            var partKeys = new Dictionary<int, string>
+            {
+                [mainPart.Identifier.ID] = GetPartComparisonKey(mainSnapshot)
+            };
 
-            foreach (var secondary in GetSecondaryParts(assembly))
+            foreach (var secondary in secondaryParts)
             {
                 var secondarySnapshot = BuildPartSnapshot(secondary, toMain);
                 snapshot.SecondaryParts.Add(secondarySnapshot);
@@ -57,7 +57,7 @@ namespace PartComparisionTool.Services
             }
 
             var assemblyParts = new List<Part> { mainPart };
-            assemblyParts.AddRange(GetSecondaryParts(assembly));
+            assemblyParts.AddRange(secondaryParts);
 
             AddBolts(snapshot, assemblyParts, toMain);
             AddWelds(snapshot, assemblyParts, partKeys);
@@ -76,7 +76,9 @@ namespace PartComparisionTool.Services
 
         public static string GetProfile(Part part)
         {
-            return part?.Profile?.ProfileString ?? string.Empty;
+            return part != null && part.Profile != null
+                ? part.Profile.ProfileString ?? string.Empty
+                : string.Empty;
         }
 
         private static List<Part> GetSecondaryParts(Assembly assembly)
@@ -102,8 +104,8 @@ namespace PartComparisionTool.Services
             return new PartSnapshot
             {
                 Profile = GetProfile(part),
-                Material = part?.Material?.MaterialString ?? string.Empty,
-                Finish = part?.Finish ?? string.Empty,
+                Material = part != null && part.Material != null ? part.Material.MaterialString ?? string.Empty : string.Empty,
+                Finish = part != null ? part.Finish ?? string.Empty : string.Empty,
                 Length = GetDoubleReportProperty(part, "LENGTH"),
                 Weight = GetDoubleReportProperty(part, "WEIGHT"),
                 GeometryKey = BuildGeometryKey(part, toMain)
@@ -200,6 +202,9 @@ namespace PartComparisionTool.Services
 
         private static string BuildGeometryKey(Part part, Matrix toMain)
         {
+            if (part == null)
+                return string.Empty;
+
             try
             {
                 var solid = part.GetSolid();
@@ -279,14 +284,16 @@ namespace PartComparisionTool.Services
         private static double GetDoubleReportProperty(ModelObject modelObject, string propertyName)
         {
             double value = 0.0;
-            modelObject?.GetReportProperty(propertyName, ref value);
+            if (modelObject != null)
+                modelObject.GetReportProperty(propertyName, ref value);
             return value;
         }
 
         private static string GetStringReportProperty(ModelObject modelObject, string propertyName)
         {
             var value = string.Empty;
-            modelObject?.GetReportProperty(propertyName, ref value);
+            if (modelObject != null)
+                modelObject.GetReportProperty(propertyName, ref value);
             return value ?? string.Empty;
         }
 
