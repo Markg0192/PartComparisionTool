@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using PartComparisionTool.Models;
+using Tekla.Structures.Filtering;
+using Tekla.Structures.Filtering.Categories;
 using Tekla.Structures.Model;
 
 namespace PartComparisionTool.Services
@@ -45,71 +47,75 @@ namespace PartComparisionTool.Services
             var target = _snapshotBuilder.Build(targetAssembly);
             targetDescription = BuildTargetDescription(target);
 
+            progress?.Invoke(new SearchProgress
+            {
+                Message = $"Filtering phases {string.Join(", ", phases.OrderBy(x => x))} for {target.MainProfile}..."
+            });
+
+            // Push the cheap phase + profile filtering into Tekla itself. This avoids
+            // enumerating every Part in a large model just to reject it in C#.
+            var filteredSets = phases
+                .OrderBy(x => x)
+                .Select(phase => GetPotentialParts(phase, target.MainProfile))
+                .ToList();
+
+            var total = filteredSets.Sum(x => x.GetSize());
+            var current = 0;
             var results = new List<ComparisonResult>();
             var seenAssemblies = new HashSet<int>();
-            var objects = _model.GetModelObjectSelector().GetAllObjectsWithType(new[] { typeof(Part) });
-            var total = objects.GetSize();
-            var current = 0;
 
-            while (objects.MoveNext())
+            foreach (var objects in filteredSets)
             {
-                current++;
-                var part = objects.Current as Part;
-                if (part == null)
-                    continue;
-
-                if (current == 1 || current % 100 == 0 || current == total)
+                while (objects.MoveNext())
                 {
+                    current++;
+                    var part = objects.Current as Part;
+                    if (part == null)
+                        continue;
+
+                    if (current == 1 || current % 50 == 0 || current == total)
+                    {
+                        progress?.Invoke(new SearchProgress
+                        {
+                            Current = current,
+                            Total = total,
+                            Message = $"Checking filtered parts {current:n0} of {total:n0}..."
+                        });
+                    }
+
+                    var length = AssemblySnapshotBuilder.GetLength(part);
+                    if (Math.Abs(length - target.MainLength) > LengthTolerance)
+                        continue;
+
+                    var assembly = part.GetAssembly();
+                    if (assembly == null || assembly.Identifier.ID == targetAssembly.Identifier.ID)
+                        continue;
+
+                    // We only want assemblies whose MAIN part matches the requested
+                    // profile/length. A fitting with the same profile must not qualify.
+                    var mainPart = assembly.GetMainPart() as Part;
+                    if (mainPart == null || mainPart.Identifier.ID != part.Identifier.ID)
+                        continue;
+
+                    if (!seenAssemblies.Add(assembly.Identifier.ID))
+                        continue;
+
                     progress?.Invoke(new SearchProgress
                     {
                         Current = current,
                         Total = total,
-                        Message = $"Scanning model parts {current:n0} of {total:n0}..."
+                        Message = $"Comparing candidate {SafeAssemblyMark(mainPart)}..."
                     });
-                }
 
-                Phase phase;
-                if (!part.GetPhase(out phase) || !phases.Contains(phase.PhaseNumber))
-                    continue;
-
-                if (!string.Equals(
-                        AssemblySnapshotBuilder.GetProfile(part),
-                        target.MainProfile,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var length = AssemblySnapshotBuilder.GetLength(part);
-                if (Math.Abs(length - target.MainLength) > LengthTolerance)
-                    continue;
-
-                var assembly = part.GetAssembly();
-                if (assembly == null || assembly.Identifier.ID == targetAssembly.Identifier.ID)
-                    continue;
-
-                var mainPart = assembly.GetMainPart() as Part;
-                if (mainPart == null || mainPart.Identifier.ID != part.Identifier.ID)
-                    continue;
-
-                if (!seenAssemblies.Add(assembly.Identifier.ID))
-                    continue;
-
-                progress?.Invoke(new SearchProgress
-                {
-                    Current = current,
-                    Total = total,
-                    Message = $"Comparing candidate {SafeAssemblyMark(mainPart)}..."
-                });
-
-                try
-                {
-                    var candidate = _snapshotBuilder.Build(assembly);
-                    results.Add(_comparer.Compare(target, candidate));
-                }
-                catch
-                {
-                    // A malformed or unsupported object should not stop the whole site search.
+                    try
+                    {
+                        var candidate = _snapshotBuilder.Build(assembly);
+                        results.Add(_comparer.Compare(target, candidate));
+                    }
+                    catch
+                    {
+                        // A malformed or unsupported object should not stop the whole site search.
+                    }
                 }
             }
 
@@ -141,6 +147,27 @@ namespace PartComparisionTool.Services
             var selected = new ArrayList { result.MainPart };
             var selector = new Tekla.Structures.Model.UI.ModelObjectSelector();
             selector.Select(selected);
+        }
+
+        private ModelObjectEnumerator GetPotentialParts(int phase, string profile)
+        {
+            var phaseExpression = new BinaryFilterExpression(
+                new PartFilterExpressions.Phase(),
+                NumericOperatorType.IS_EQUAL,
+                new NumericConstantFilterExpression(phase));
+
+            var profileExpression = new BinaryFilterExpression(
+                new PartFilterExpressions.Profile(),
+                StringOperatorType.IS_EQUAL,
+                new StringConstantFilterExpression(profile));
+
+            var filter = new BinaryFilterExpressionCollection();
+            filter.Add(new BinaryFilterExpressionItem(
+                phaseExpression,
+                BinaryFilterOperatorType.BOOLEAN_AND));
+            filter.Add(new BinaryFilterExpressionItem(profileExpression));
+
+            return _model.GetModelObjectSelector().GetObjectsByFilter(filter);
         }
 
         private static Part GetSelectedPart()
